@@ -98,6 +98,9 @@ foreach (comp ${Libcaf_FIND_COMPONENTS})
   endif ()
 endforeach ()
 
+message(STATUS "LIBCAF_INCLUDE_DIRS: ${LIBCAF_INCLUDE_DIRS}")
+message(STATUS "LIBCAF_LIBRARIES: ${LIBCAF_LIBRARIES}")
+
 # let CMake check whether all requested components have been found
 include(FindPackageHandleStandardArgs)
 find_package_handle_standard_args(Libcaf

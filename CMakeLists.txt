@@ -69,19 +69,25 @@ else ()
   set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif ()
 
-find_package(Libcaf COMPONENTS core io REQUIRED)
+find_package(Libcaf COMPONENTS core io opencl REQUIRED)
 find_package(OPENCL REQUIRED)
 add_definitions("-DENABLE_OPENCL")
+message(STATUS "LIBCAF_LIBRARIES: ${LIBCAF_LIBRARIES}")
 #set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_OPENCL")
+
+FIND_PACKAGE(Qt4 REQUIRED)
+INCLUDE(${QT_USE_FILE})
 
 INCLUDE_DIRECTORIES(. include ${CMAKE_BINARY_DIR} ${LIBCAF_INCLUDE_DIRS} ${OPENCL_INCLUDE_DIRS})
 
-set(SOURCES src/main.cpp)
+set(SOURCES
+    src/main.cpp
+    src/client.cpp
+    src/config.cpp
+    src/q_byte_array_info.cpp)
 
 file(GLOB HEADERS "include/*.hpp")
 
-
 add_executable(cl-bench ${SOURCES} ${HEADERS})
-target_link_libraries(cl-bench ${CMAKE_DL_LIBS} ${LIBCAF_LIBRARIES} ${OPENCL_LIBRARIES})
-
+target_link_libraries(cl-bench ${CMAKE_DL_LIBS} ${LIBCAF_LIBRARIES} ${QT_LIBRARIES} ${OPENCL_LIBRARIES})
 
