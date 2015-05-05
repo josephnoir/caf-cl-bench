@@ -3,9 +3,9 @@
 const char* image_format = "PNG";
 const char* image_file_ending = ".png";
 
-const std::uint32_t default_width = 5120;
-const std::uint32_t default_height = 2880;
-const std::uint32_t default_iterations = 25000;
+const std::uint32_t default_width = 16000; //2560; //16000; //5120;
+const std::uint32_t default_height = 16000; //1440; //16000; //10000; //2880;
+const std::uint32_t default_iterations = 5000;
 
 const float_type default_min_real = -1.9; // must be <= 0.0
 const float_type default_max_real = 1.0;  // must be >= 0.0

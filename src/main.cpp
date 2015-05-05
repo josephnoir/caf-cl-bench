@@ -239,6 +239,6 @@ int main(int argc, char** argv) {
   }
   shutdown();
   auto time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start);
-  cout << (100-on_cpu) << "% GPU: " << time.count() << " ms" << endl;
+  cout << on_cpu << ", " << time.count() << endl;
   return 0;
 }

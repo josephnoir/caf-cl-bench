@@ -14,22 +14,24 @@ endif ()
 
 set (CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
-# check if the user provided CXXFLAGS on the command line
-if (CMAKE_CXX_FLAGS)
-    set(CXXFLAGS_PROVIDED true)
-endif ()
-if (CXXFLAGS_PROVIDED)
+message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+
+if(CMAKE_CXX_FLAGS)
   set(CMAKE_CXX_FLAGS_DEBUG          "")
   set(CMAKE_CXX_FLAGS_MINSIZEREL     "")
   set(CMAKE_CXX_FLAGS_RELEASE        "")
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "")
-else ()
-  set(CMAKE_CXX_FLAGS                "-std=c++11 -Wextra -Wall -pedantic")
+else()
+  set(CMAKE_CXX_FLAGS "-std=c++11 -Wextra -Wall -pedantic ${EXTRA_FLAGS}")
   set(CMAKE_CXX_FLAGS_DEBUG          "-O0 -g")
   set(CMAKE_CXX_FLAGS_MINSIZEREL     "-Os")
-  set(CMAKE_CXX_FLAGS_RELEASE        "-O4")
+  set(CMAKE_CXX_FLAGS_RELEASE        "-O3 -DNDEBUG")
   set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -g")
-endif ()
+endif()
+# set build default build type to RelWithDebInfo if not set
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
 
 # check for g++ >= 4.7 or clang++ > = 3.2
 try_run(ProgramResult
@@ -65,9 +67,7 @@ endif(CAF_LOG_LEVEL)
 if (ENABLE_DEBUG)
   set(CMAKE_BUILD_TYPE Debug)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCAF_DEBUG")
-else ()
-  set(CMAKE_BUILD_TYPE RelWithDebInfo)
-endif ()
+endif()
 
 find_package(Libcaf COMPONENTS core io opencl REQUIRED)
 find_package(OPENCL REQUIRED)
@@ -76,7 +76,7 @@ add_definitions("-DENABLE_OPENCL")
 FIND_PACKAGE(Qt4 REQUIRED)
 INCLUDE(${QT_USE_FILE})
 
-INCLUDE_DIRECTORIES(. include ${CMAKE_BINARY_DIR} ${LIBCAF_INCLUDE_DIRS} ${OPENCL_INCLUDE_DIRS})
+INCLUDE_DIRECTORIES(. include ${CMAKE_BINARY_DIR} ${LIBCAF_INCLUDE_DIRS} ${OpenCL_INCLUDE_DIRS})
 
 set(SOURCES
     src/main.cpp
@@ -87,5 +87,16 @@ set(SOURCES
 file(GLOB HEADERS "include/*.hpp")
 
 add_executable(cl-bench ${SOURCES} ${HEADERS})
-target_link_libraries(cl-bench ${CMAKE_DL_LIBS} ${LIBCAF_LIBRARIES} ${QT_LIBRARIES} ${OPENCL_LIBRARIES})
+target_link_libraries(cl-bench ${CMAKE_DL_LIBS} ${LIBCAF_LIBRARIES} ${QT_LIBRARIES} ${OpenCL_LIBRARIES})
+
+set(LD_FLAGS ${LD_FLAGS} ${CMAKE_LD_LIBS})
+
+string(TOUPPER "${CMAKE_BUILD_TYPE}" UPPER_BUILD_TYPE)
+set(ALL_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE}}")
+message(STATUS
+        "\n====================|  Build Summary  |===================="
+        "\nBuild type:        ${CMAKE_BUILD_TYPE}"
+        "\nCXXFLAGS:          ${ALL_CXX_FLAGS}"
+        "\nLIBRARIES:         ${LD_FLAGS}"
+        "\n===========================================================\n")
 

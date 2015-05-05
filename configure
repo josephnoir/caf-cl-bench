@@ -108,7 +108,6 @@ configure ()
 # Set defaults.
 builddir="$sourcedir/build"
 CMakeCacheEntries=""
-append_cache_entry CMAKE_BUILD_TYPE            STRING RelWithDebInfo
 append_cache_entry CMAKE_INSTALL_PREFIX        PATH   /usr/local
 append_cache_entry ENABLE_DEBUG                BOOL   false
 append_cache_entry ENABLE_OPENCL               BOOL   true
