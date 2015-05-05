@@ -19,8 +19,6 @@
 #  LIBCAF_LIBRARY_$C         Library file for component $C
 #  LIBCAF_INCLUDE_DIR_$C     Include path for component $C
 
-message("LIBCAF_ROOT_DIR is: ${LIBCAF_ROOT_DIR}")
-
 # iterate over user-defined components
 foreach (comp ${Libcaf_FIND_COMPONENTS})
   # we use uppercase letters only for variable names
@@ -97,9 +95,6 @@ foreach (comp ${Libcaf_FIND_COMPONENTS})
     endif ()
   endif ()
 endforeach ()
-
-message(STATUS "LIBCAF_INCLUDE_DIRS: ${LIBCAF_INCLUDE_DIRS}")
-message(STATUS "LIBCAF_LIBRARIES: ${LIBCAF_LIBRARIES}")
 
 # let CMake check whether all requested components have been found
 include(FindPackageHandleStandardArgs)

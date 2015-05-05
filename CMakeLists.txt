@@ -72,8 +72,6 @@ endif ()
 find_package(Libcaf COMPONENTS core io opencl REQUIRED)
 find_package(OPENCL REQUIRED)
 add_definitions("-DENABLE_OPENCL")
-message(STATUS "LIBCAF_LIBRARIES: ${LIBCAF_LIBRARIES}")
-#set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_OPENCL")
 
 FIND_PACKAGE(Qt4 REQUIRED)
 INCLUDE(${QT_USE_FILE})
@@ -82,7 +80,7 @@ INCLUDE_DIRECTORIES(. include ${CMAKE_BINARY_DIR} ${LIBCAF_INCLUDE_DIRS} ${OPENC
 
 set(SOURCES
     src/main.cpp
-    src/client.cpp
+#    src/client.cpp
     src/config.cpp
     src/q_byte_array_info.cpp)
 

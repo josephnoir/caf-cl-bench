@@ -16,6 +16,5 @@ extern const float_type default_min_real;
 extern const float_type default_max_real;
 extern const float_type default_min_imag;
 extern const float_type default_max_imag;
-extern const float_type default_zoom;
 
 #endif // CONFIG_HPP
