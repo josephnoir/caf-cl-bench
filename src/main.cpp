@@ -49,7 +49,7 @@ constexpr const char* kernel_source = R"__(
   }
 )__";
 
-//#define PRINT_IMAGES
+#define PRINT_IMAGE
 //#define ENABLE_DEBUG
 #ifdef ENABLE_DEBUG
 #define DEBUG(x) cerr << x << endl;
@@ -162,7 +162,6 @@ T get_top(T distance, uint32_t percentage) {
 }
 
 int main(int argc, char** argv) {
-  auto iterations = default_iterations;
   uint32_t on_cpu = 100;
   if (argc == 2) {
     on_cpu = stoul(argv[1]);
@@ -173,19 +172,39 @@ int main(int argc, char** argv) {
     usage(argv[0]);
   }
 
-  auto cpu_width  = get_bottom(default_width, on_cpu);
-  auto cpu_height = default_height;
-  auto cpu_min_re = default_min_real;
-  auto cpu_max_re = get_cut(default_min_real, default_max_real, on_cpu);
-  auto cpu_min_im = default_min_imag;
-  auto cpu_max_im = default_max_imag;
+  auto iterations = default_iterations;
+  auto width      = default_width;
+  auto height     = default_height;
+  auto min_re     = default_min_real;
+  auto max_re     = default_max_real;
+  auto min_im     = default_min_imag;
+  auto max_im     = default_max_imag;
 
-  auto gpu_width  = get_top(default_width, on_cpu);
-  auto gpu_height = default_height;
-  auto gpu_min_re = get_cut(default_min_real, default_max_real, on_cpu);
-  auto gpu_max_re = default_max_real;
-  auto gpu_min_im = default_min_imag;
-  auto gpu_max_im = default_max_imag;
+  auto scale = [&](float_type ratio) {
+    float_type abs_re = fabs(max_re + (-1 * min_re)) / 2;
+    float_type abs_im = fabs(max_im + (-1  * min_im)) / 2;
+    float_type mid_re = min_re + abs_re;
+    float_type mid_im = min_im + abs_im;
+    min_re = mid_re - (abs_re * ratio);
+    max_re = mid_re + (abs_re * ratio);
+    min_im = mid_im - (abs_im * ratio);
+    max_im = mid_im + (abs_im * ratio); // min_im + (max_re - min_re) * height / width;
+  };
+  scale(0.3);
+
+  auto cpu_width  = get_bottom(width, on_cpu);
+  auto cpu_height = height;
+  auto cpu_min_re = min_re;
+  auto cpu_max_re = get_cut(min_re, max_re, on_cpu);
+  auto cpu_min_im = min_im;
+  auto cpu_max_im = max_im;
+
+  auto gpu_width  = get_top(width, on_cpu);
+  auto gpu_height = height;
+  auto gpu_min_re = get_cut(min_re, max_re, on_cpu);
+  auto gpu_max_re = max_re;
+  auto gpu_min_im = min_im;
+  auto gpu_max_im = max_im;
 
   DEBUG("[cpu] width: " << cpu_width
         << "(" << cpu_min_re << " to " << cpu_max_re << ")");
