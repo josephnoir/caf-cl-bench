@@ -104,6 +104,7 @@ void color_and_print(const std::vector<QColor>& palette,
 
 // calculates mandelbrot that contains the iteration count on GPU
 void mandel_cl(event_based_actor* self,
+               caf::opencl::program kernel,
                std::uint32_t iterations,
                std::uint32_t width,
                std::uint32_t height,
@@ -111,7 +112,7 @@ void mandel_cl(event_based_actor* self,
                float_type max_real,
                float_type min_imag,
                float_type max_imag) {
-  auto clworker = spawn_cl<int*(float*)>(kernel_source, "mandelbrot",
+  auto clworker = spawn_cl<int*(float*)>(kernel, "mandelbrot",
                                          {width, height});
   vector<float_type> cljob;
   cljob.reserve(7);
@@ -191,10 +192,11 @@ int main(int argc, char** argv) {
   DEBUG("[gpu] width: " << gpu_width
         << "(" << gpu_min_re << " to " << gpu_max_re << ")");
 
+  auto kernel = caf::opencl::program::create(kernel_source);
   auto start = std::chrono::system_clock::now();
   if (gpu_width > 0) {
     // trigger calculation on the GPU
-    spawn(mandel_cl, iterations, gpu_width, gpu_height,
+    spawn(mandel_cl, kernel, iterations, gpu_width, gpu_height,
           gpu_min_re, gpu_max_re, gpu_min_im, gpu_max_im);
   }
 
