@@ -50,7 +50,7 @@ constexpr const char* kernel_source = R"__(
 )__";
 
 // Some config stuff
-#define PRINT_IMAGE
+//#define PRINT_IMAGE
 //#define ENABLE_DEBUG
 #define ENABLE_CPU
 #define ENABLE_GPU
@@ -258,12 +258,12 @@ int main(int argc, char** argv) {
     std::vector<int> image(cpu_width * cpu_height);
     auto re_factor = (cpu_max_re - cpu_min_re) / (cpu_width - 1);
     auto im_factor = (cpu_max_im - cpu_min_im) / (cpu_height - 1);
-    for (uint32_t y = 0; y < cpu_height; ++y) {
-      int* line = &image[y * cpu_width];
+    int* indirection = image.data();
+    for (uint32_t im = 0; im < cpu_height; ++im) {
       spawn([=] {
-        for (uint32_t x = 0; x < cpu_width; ++x) {
-          auto z_re = cpu_min_re + x * re_factor;
-          auto z_im = cpu_max_im - y * im_factor;
+        for (uint32_t re = 0; re < cpu_width; ++re) {
+          auto z_re = cpu_min_re + re * re_factor;
+          auto z_im = cpu_max_im - im * im_factor;
           auto const_re = z_re;
           auto const_im = z_im;
           uint32_t cnt = 0;
@@ -276,17 +276,17 @@ int main(int argc, char** argv) {
             cond = z_re * z_re + z_im * z_im;
             ++cnt;
           } while (cnt < iterations && cond <= 4.0f);
-          line[x] = cnt;
+          indirection[re + im * cpu_width] = cnt;
         }
       });
     }
+    await_all_actors_done();
 #ifdef PRINT_IMAGE
     std::vector<QColor> palette;
     calculate_palette(palette, iterations);
     color_and_print(palette, image, cpu_width, cpu_height, "cpu");
 #endif // PRINT_IMAGE
     DEBUG("Mandelbrot on CPU calculated");
-    await_all_actors_done();
     time_cpu = chrono::duration_cast<chrono::milliseconds>(
       chrono::system_clock::now() - start_cpu
     ).count();
