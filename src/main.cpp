@@ -59,6 +59,10 @@ constexpr const char* kernel_source = R"__(
 
 } // namespace <anonymous>
 
+// !!!! ugly global values for time !!!!
+unsigned long time_gpu = 0;
+unsigned long time_cpu = 0;
+
 inline void calculate_palette(std::vector<QColor>& storage, uint32_t iterations) {
   // generating new colors
   storage.clear();
@@ -112,6 +116,7 @@ void mandel_cl(event_based_actor* self,
                float_type max_real,
                float_type min_imag,
                float_type max_imag) {
+  auto start_gpu = std::chrono::system_clock::now();
   auto clworker = spawn_cl<int*(float*)>(kernel, "mandelbrot",
                                          {width, height});
   vector<float_type> cljob;
@@ -134,6 +139,9 @@ void mandel_cl(event_based_actor* self,
 #ifdef PRINT_IMAGE
       color_and_print(palette, result, width, height, "gpu");
 #endif
+      time_gpu = chrono::duration_cast<chrono::microseconds>(
+        chrono::system_clock::now() - start_gpu
+      ).count();
     }
   );
 }
@@ -218,7 +226,7 @@ int main(int argc, char** argv) {
     spawn(mandel_cl, kernel, iterations, gpu_width, gpu_height,
           gpu_min_re, gpu_max_re, gpu_min_im, gpu_max_im);
   }
-
+  auto start_cpu = std::chrono::system_clock::now();
   if (cpu_width > 0) {
     // trigger calculation on the CPU
     std::vector<int> image(cpu_width * cpu_height);
@@ -255,11 +263,19 @@ int main(int argc, char** argv) {
 #ifdef PRINT_IMAGE
     color_and_print(palette, image, cpu_width, cpu_height, "cpu");
 #endif
+    time_cpu = chrono::duration_cast<chrono::microseconds>(
+      chrono::system_clock::now() - start_cpu
+    ).count();
   } else {
     await_all_actors_done();
   }
   shutdown();
-  auto time = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now() - start);
-  cout << on_cpu << ", " << time.count() << endl;
+  auto time_total = chrono::duration_cast<chrono::microseconds>(
+    chrono::system_clock::now() - start
+  ).count();
+  cout << on_cpu << ", " << time_total
+                 << ", " << time_cpu
+                 << ", " << time_gpu
+                 << endl;
   return 0;
 }
