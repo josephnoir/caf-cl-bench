@@ -50,7 +50,7 @@ constexpr const char* kernel_source = R"__(
 )__";
 
 // Some config stuff
-//#define PRINT_IMAGE
+#define PRINT_IMAGE
 //#define ENABLE_DEBUG
 #define ENABLE_CPU
 #define ENABLE_GPU
@@ -66,7 +66,9 @@ constexpr const char* kernel_source = R"__(
 // !!!! ugly global values for time !!!!
 unsigned long time_gpu = 0;
 unsigned long time_cpu = 0;
+unsigned long distribution = 100;
 
+#ifdef PRINT_IMAGE
 inline void calculate_palette(std::vector<QColor>& storage, uint32_t iterations) {
   // generating new colors
   storage.clear();
@@ -99,7 +101,7 @@ void color_and_print(const std::vector<QColor>& palette,
   buf.close();
   auto img = QImage::fromData(ba, image_format);
   std::ostringstream fname;
-  fname << "mandelbrot_" << identifier;
+  fname << "mandelbrot_" << distribution << "_" << identifier;
   fname << image_file_ending;
   QFile f{fname.str().c_str()};
   if (!f.open(QIODevice::WriteOnly)) {
@@ -109,7 +111,9 @@ void color_and_print(const std::vector<QColor>& palette,
     DEBUG(identifier << " image saved");
   }
 }
+#endif // PRINT_IMAGE
 
+#ifdef ENABLE_GPU
 // calculates mandelbrot that contains the iteration count on GPU
 void mandel_cl(event_based_actor* self,
                caf::opencl::program kernel,
@@ -120,35 +124,42 @@ void mandel_cl(event_based_actor* self,
                float_type max_real,
                float_type min_imag,
                float_type max_imag) {
+  auto unbox_args = [](message& msg) -> optional<message> {
+    return msg;
+  };
+  auto box_res = [] (vector<int>& result) -> message {
+    return make_message(move(result), chrono::system_clock::now());
+  };
+  vector<float_type> cljob {
+    static_cast<float_type>(iterations),
+    static_cast<float_type>(width),
+    static_cast<float_type>(height),
+    min_real, max_real,
+    min_imag, max_imag
+  };
   auto start_gpu = std::chrono::system_clock::now();
-  auto clworker = spawn_cl<int*(float*)>(kernel, "mandelbrot",
+  auto clworker = spawn_cl<int*(float_type*)>(kernel, "mandelbrot",
+                                         unbox_args, box_res,
                                          {width, height});
-  vector<float_type> cljob;
-  cljob.reserve(7);
-  cljob.push_back(iterations);
-  cljob.push_back(width);
-  cljob.push_back(height);
-  cljob.push_back(min_real);
-  cljob.push_back(max_real);
-  cljob.push_back(min_imag);
-  cljob.push_back(max_imag);
-#ifdef PRINT_IMAGE
-  std::vector<QColor> palette;
-  calculate_palette(palette, iterations);
-#endif // PRINT_IMAGE
   self->sync_send(clworker, std::move(cljob)).then (
-    [=](const vector<int>& result) {
+    [=](const vector<int>& result, const chrono::system_clock::time_point& end_gpu) {
       static_cast<void>(result);
       DEBUG("Mandelbrot on GPU calculated");
 #ifdef PRINT_IMAGE
+      std::vector<QColor> palette;
+      calculate_palette(palette, iterations);
       color_and_print(palette, result, width, height, "gpu");
 #endif // PRINT_IMAGE
-      time_gpu = chrono::duration_cast<chrono::microseconds>(
-        chrono::system_clock::now() - start_gpu
+      time_gpu = chrono::duration_cast<chrono::milliseconds>(
+        end_gpu - start_gpu
       ).count();
+    },
+    others() >> [] {
+      DEBUG("Unhandled message in mandel_cl");
     }
   );
 }
+#endif // ENABLE_GPU
 
 void usage(const char* name) {
   cout << "usage: ./" << name << " <%onCPU>" << endl
@@ -184,6 +195,8 @@ int main(int argc, char** argv) {
     usage(argv[0]);
   }
 
+  distribution = on_cpu;
+
   auto iterations = default_iterations;
   auto width      = default_width;
   auto height     = default_height;
@@ -197,34 +210,39 @@ int main(int argc, char** argv) {
     float_type abs_im = fabs(max_im + (-1 * min_im)) / 2;
     float_type mid_re = min_re + abs_re;
     float_type mid_im = min_im + abs_im;
-    min_re = mid_re - (abs_re * ratio);
-    max_re = mid_re + (abs_re * ratio);
-    min_im = mid_im - (abs_im * ratio);
-    max_im = mid_im + (abs_im * ratio);
+    auto dist = abs_re * ratio;
+    min_re = mid_re - dist;
+    max_re = mid_re + dist;
+    min_im = mid_im - dist;
+    max_im = mid_im + dist;
   };
-  scale(default_scaling);
+//  scale(default_scaling);
 
+#ifdef ENABLE_CPU
   auto cpu_width  = get_bottom(width, on_cpu);
   auto cpu_height = height;
   auto cpu_min_re = min_re;
   auto cpu_max_re = get_cut(min_re, max_re, on_cpu);
   auto cpu_min_im = min_im;
   auto cpu_max_im = max_im;
+  DEBUG("[CPU] width: " << cpu_width
+        << "(" << cpu_min_re << " to " << cpu_max_re << ")");
+#endif // ENABLE_CPU
 
+#ifdef ENABLE_GPU
   auto gpu_width  = get_top(width, on_cpu);
   auto gpu_height = height;
   auto gpu_min_re = get_cut(min_re, max_re, on_cpu);
   auto gpu_max_re = max_re;
   auto gpu_min_im = min_im;
   auto gpu_max_im = max_im;
-
-  DEBUG("[cpu] width: " << cpu_width
-        << "(" << cpu_min_re << " to " << cpu_max_re << ")");
-  DEBUG("[gpu] width: " << gpu_width
+  DEBUG("[GPU] width: " << gpu_width
         << "(" << gpu_min_re << " to " << gpu_max_re << ")");
+#endif // ENABLE_GPU
 
   auto kernel = caf::opencl::program::create(kernel_source);
   auto start = std::chrono::system_clock::now();
+
 #ifdef ENABLE_GPU
   if (gpu_width > 0) {
     // trigger calculation on the GPU
@@ -232,6 +250,7 @@ int main(int argc, char** argv) {
           gpu_min_re, gpu_max_re, gpu_min_im, gpu_max_im);
   }
 #endif // ENABLE_GPU
+
 #ifdef ENABLE_CPU
   auto start_cpu = std::chrono::system_clock::now();
   if (cpu_width > 0) {
@@ -264,21 +283,19 @@ int main(int argc, char** argv) {
 #ifdef PRINT_IMAGE
     std::vector<QColor> palette;
     calculate_palette(palette, iterations);
-#endif // PRINT_IMAGE
-    await_all_actors_done();
-    DEBUG("Mandelbrot on CPU calculated");
-#ifdef PRINT_IMAGE
     color_and_print(palette, image, cpu_width, cpu_height, "cpu");
 #endif // PRINT_IMAGE
-    time_cpu = chrono::duration_cast<chrono::microseconds>(
+    DEBUG("Mandelbrot on CPU calculated");
+    await_all_actors_done();
+    time_cpu = chrono::duration_cast<chrono::milliseconds>(
       chrono::system_clock::now() - start_cpu
     ).count();
   }
-#else // NOT ENABLE_CPU
+#endif
+
   await_all_actors_done();
-#endif // ENABLE_CPU
   shutdown();
-  auto time_total = chrono::duration_cast<chrono::microseconds>(
+  auto time_total = chrono::duration_cast<chrono::milliseconds>(
     chrono::system_clock::now() - start
   ).count();
   cout << on_cpu << ", " << time_total
