@@ -49,7 +49,7 @@ constexpr const char* kernel_source = R"__(
   }
 )__";
 
-#define PRINT_IMAGE
+//#define PRINT_IMAGE
 //#define ENABLE_DEBUG
 #ifdef ENABLE_DEBUG
 #define DEBUG(x) cerr << x << endl;
@@ -80,7 +80,7 @@ void color_and_print(const std::vector<QColor>& palette,
                QImage::Format_RGB32};
   for (uint32_t y = 0; y < height; ++y) {
     for (uint32_t x = 0; x < width; ++x) {
-      image.setPixel(x,y,palette[counts[x+y*width]].rgb());
+      image.setPixel(x,y,palette[counts[x + y * width]].rgb());
     }
   }
   // print image
@@ -182,7 +182,7 @@ int main(int argc, char** argv) {
 
   auto scale = [&](float_type ratio) {
     float_type abs_re = fabs(max_re + (-1 * min_re)) / 2;
-    float_type abs_im = fabs(max_im + (-1  * min_im)) / 2;
+    float_type abs_im = fabs(max_im + (-1 * min_im)) / 2;
     float_type mid_re = min_re + abs_re;
     float_type mid_im = min_im + abs_im;
     min_re = mid_re - (abs_re * ratio);
