@@ -49,8 +49,12 @@ constexpr const char* kernel_source = R"__(
   }
 )__";
 
+// Some config stuff
 //#define PRINT_IMAGE
 //#define ENABLE_DEBUG
+#define ENABLE_CPU
+#define ENABLE_GPU
+
 #ifdef ENABLE_DEBUG
 #define DEBUG(x) cerr << x << endl;
 #else
@@ -131,14 +135,14 @@ void mandel_cl(event_based_actor* self,
 #ifdef PRINT_IMAGE
   std::vector<QColor> palette;
   calculate_palette(palette, iterations);
-#endif
+#endif // PRINT_IMAGE
   self->sync_send(clworker, std::move(cljob)).then (
     [=](const vector<int>& result) {
       static_cast<void>(result);
       DEBUG("Mandelbrot on GPU calculated");
 #ifdef PRINT_IMAGE
       color_and_print(palette, result, width, height, "gpu");
-#endif
+#endif // PRINT_IMAGE
       time_gpu = chrono::duration_cast<chrono::microseconds>(
         chrono::system_clock::now() - start_gpu
       ).count();
@@ -188,7 +192,7 @@ int main(int argc, char** argv) {
   auto min_im     = default_min_imag;
   auto max_im     = default_max_imag;
 
-  auto scale = [&](float_type ratio) {
+  auto scale = [&](const float_type ratio) {
     float_type abs_re = fabs(max_re + (-1 * min_re)) / 2;
     float_type abs_im = fabs(max_im + (-1 * min_im)) / 2;
     float_type mid_re = min_re + abs_re;
@@ -196,9 +200,9 @@ int main(int argc, char** argv) {
     min_re = mid_re - (abs_re * ratio);
     max_re = mid_re + (abs_re * ratio);
     min_im = mid_im - (abs_im * ratio);
-    max_im = mid_im + (abs_im * ratio); // min_im + (max_re - min_re) * height / width;
+    max_im = mid_im + (abs_im * ratio);
   };
-  scale(0.3);
+  scale(default_scaling);
 
   auto cpu_width  = get_bottom(width, on_cpu);
   auto cpu_height = height;
@@ -221,11 +225,14 @@ int main(int argc, char** argv) {
 
   auto kernel = caf::opencl::program::create(kernel_source);
   auto start = std::chrono::system_clock::now();
+#ifdef ENABLE_GPU
   if (gpu_width > 0) {
     // trigger calculation on the GPU
     spawn(mandel_cl, kernel, iterations, gpu_width, gpu_height,
           gpu_min_re, gpu_max_re, gpu_min_im, gpu_max_im);
   }
+#endif // ENABLE_GPU
+#ifdef ENABLE_CPU
   auto start_cpu = std::chrono::system_clock::now();
   if (cpu_width > 0) {
     // trigger calculation on the CPU
@@ -257,18 +264,19 @@ int main(int argc, char** argv) {
 #ifdef PRINT_IMAGE
     std::vector<QColor> palette;
     calculate_palette(palette, iterations);
-#endif
+#endif // PRINT_IMAGE
     await_all_actors_done();
     DEBUG("Mandelbrot on CPU calculated");
 #ifdef PRINT_IMAGE
     color_and_print(palette, image, cpu_width, cpu_height, "cpu");
-#endif
+#endif // PRINT_IMAGE
     time_cpu = chrono::duration_cast<chrono::microseconds>(
       chrono::system_clock::now() - start_cpu
     ).count();
-  } else {
-    await_all_actors_done();
   }
+#else // NOT ENABLE_CPU
+  await_all_actors_done();
+#endif // ENABLE_CPU
   shutdown();
   auto time_total = chrono::duration_cast<chrono::microseconds>(
     chrono::system_clock::now() - start
