@@ -60,10 +60,18 @@ constexpr const char* kernel_source = R"__(
 
 } // namespace <anonymous>
 
+// how much of the problem is offloaded to the OpenCL device
+unsigned long with_opencl = 0;
+
 // global values to track the time
+chrono::system_clock::time_point cpu_start;
+chrono::system_clock::time_point gpu_start;
+chrono::system_clock::time_point total_start;
+chrono::system_clock::time_point cpu_end;
+chrono::system_clock::time_point gpu_end;
+chrono::system_clock::time_point total_end;
 unsigned long time_gpu = 0;
 unsigned long time_cpu = 0;
-unsigned long on_gpu = 100;
 
 #ifdef PRINT_IMAGE
 inline void calculate_palette(vector<QColor>& storage, uint32_t iterations) {
@@ -98,7 +106,7 @@ void color_and_print(const vector<QColor>& palette,
   buf.close();
   auto img = QImage::fromData(ba, image_format);
   ostringstream fname;
-  fname << "mandelbrot_" << on_gpu << "_" << identifier;
+  fname << "mandelbrot_" << with_opencl << "_" << identifier;
   fname << image_file_ending;
   QFile f{fname.str().c_str()};
   if (!f.open(QIODevice::WriteOnly)) {
@@ -136,11 +144,12 @@ void mandel_cl(event_based_actor* self,
     min_imag, max_imag
   };
   spawn_config conf{dim_vec{width, height}};
-  auto start_gpu = chrono::system_clock::now();
+  gpu_start = chrono::system_clock::now();
   auto clworker = spawn_cl(kernel, "mandelbrot", conf, unbox_args, box_res,
                            in<vector<float_type>>{}, out<vector<int>>{});
   self->sync_send(clworker, move(cljob)).then (
-    [=](const vector<int>& result, const chrono::system_clock::time_point& end_gpu) {
+    [=](const vector<int>& result, const chrono::system_clock::time_point& end) {
+      gpu_end = end;
       static_cast<void>(result);
       DEBUG("Mandelbrot on GPU calculated");
 #ifdef PRINT_IMAGE
@@ -149,7 +158,7 @@ void mandel_cl(event_based_actor* self,
       color_and_print(palette, result, width, height, "gpu");
 #endif // PRINT_IMAGE
       time_gpu = chrono::duration_cast<chrono::milliseconds>(
-        end_gpu - start_gpu
+        gpu_end - gpu_start
       ).count();
     }
   );
@@ -196,15 +205,16 @@ program create_program(const string& dev_type, const char* source,
 }
 
 int main(int argc, char** argv) {
+  total_start = chrono::system_clock::now();
   uint32_t width = default_width;
   uint32_t height = default_height;
   uint32_t iterations = default_iterations;
   string dev_type = "";
   auto res = message_builder(argv + 1, argv + argc).extract_opts({
-    {"width,W",       "set width                       (16000)", width},
-    {"height,H",      "set height                      (16000)", height},
-    {"iterations,i",  "set iterations                  (  500)", iterations},
-    {"on-gpu,g",      "part calculated on the GPU in % (    0)", on_gpu},
+    {"width,W",       "set width                        (16000)", width},
+    {"height,H",      "set height                       (16000)", height},
+    {"iterations,i",  "set iterations                   (  500)", iterations},
+    {"with-opencl,o", "part calculated with OpenCL in % (    0)", with_opencl},
     {"device-type,d", "set device type (gpu, cpu, accelerator)", dev_type}
   });
   if(! res.error.empty()) {
@@ -217,7 +227,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  auto on_cpu  = 100 - on_gpu;
+  auto on_cpu  = 100 - with_opencl;
   auto min_re  = default_min_real;
   auto max_re  = default_max_real;
   auto min_im  = default_min_imag;
@@ -260,7 +270,6 @@ int main(int argc, char** argv) {
 
 #ifdef ENABLE_GPU
   auto kernel = create_program(dev_type, kernel_source);
-  auto start  = chrono::system_clock::now();
   if (gpu_width > 0) {
     // trigger calculation on the GPU
     spawn(mandel_cl, kernel, iterations, gpu_width, gpu_height,
@@ -269,7 +278,7 @@ int main(int argc, char** argv) {
 #endif // ENABLE_GPU
 
 #ifdef ENABLE_CPU
-  auto start_cpu = chrono::system_clock::now();
+  cpu_start = chrono::system_clock::now();
   if (cpu_width > 0) {
     // trigger calculation on the CPU
     vector<int> image(cpu_width * cpu_height);
@@ -298,24 +307,26 @@ int main(int argc, char** argv) {
       });
     }
     await_all_actors_done();
+    DEBUG("Mandelbrot on CPU calculated");
+    cpu_end = chrono::system_clock::now();
+    time_cpu = chrono::duration_cast<chrono::milliseconds>(
+      cpu_end - cpu_start
+    ).count();
 #ifdef PRINT_IMAGE
     vector<QColor> palette;
     calculate_palette(palette, iterations);
     color_and_print(palette, image, cpu_width, cpu_height, "cpu");
 #endif // PRINT_IMAGE
-    DEBUG("Mandelbrot on CPU calculated");
-    time_cpu = chrono::duration_cast<chrono::milliseconds>(
-      chrono::system_clock::now() - start_cpu
-    ).count();
   }
 #endif
 
   await_all_actors_done();
   shutdown();
+  total_end = chrono::system_clock::now();
   auto time_total = chrono::duration_cast<chrono::milliseconds>(
-    chrono::system_clock::now() - start
+    total_end - total_start
   ).count();
-  cout << on_gpu
+  cout << with_opencl
        << ", " << time_total
        << ", " << time_cpu
        << ", " << time_gpu
