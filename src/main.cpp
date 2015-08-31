@@ -52,10 +52,10 @@ constexpr const char* kernel_source = R"__(
   }
 )__";
 
-#ifdef CAF_DEBUG
-#define DEBUG(x) cerr << x << endl;
-#else
+#ifdef NDEBUG
 #define DEBUG(x)
+#else
+#define DEBUG(x) cerr << x << endl;
 #endif
 
 } // namespace <anonymous>
@@ -63,7 +63,7 @@ constexpr const char* kernel_source = R"__(
 // global values to track the time
 unsigned long time_gpu = 0;
 unsigned long time_cpu = 0;
-unsigned long distribution = 100;
+unsigned long on_gpu = 100;
 
 #ifdef PRINT_IMAGE
 inline void calculate_palette(vector<QColor>& storage, uint32_t iterations) {
@@ -98,7 +98,7 @@ void color_and_print(const vector<QColor>& palette,
   buf.close();
   auto img = QImage::fromData(ba, image_format);
   ostringstream fname;
-  fname << "mandelbrot_" << distribution << "_" << identifier;
+  fname << "mandelbrot_" << on_gpu << "_" << identifier;
   fname << image_file_ending;
   QFile f{fname.str().c_str()};
   if (!f.open(QIODevice::WriteOnly)) {
@@ -156,13 +156,6 @@ void mandel_cl(event_based_actor* self,
 }
 #endif // ENABLE_GPU
 
-void usage(const char* name) {
-  cout << "usage: ./" << name << " <%onCPU>" << endl
-       << "   Argument specifies the percentage calculated on the CPU,"
-          "   the rest is calculated on the GPU (default 100)" << endl;
-  exit(0);
-}
-
 template<typename T>
 T get_cut(T start, T end, uint32_t percentage) {
   auto dist = (abs(start) + abs(end)) * percentage / 100.0;
@@ -206,13 +199,12 @@ int main(int argc, char** argv) {
   uint32_t width = default_width;
   uint32_t height = default_height;
   uint32_t iterations = default_iterations;
-  uint32_t on_cpu = 100;
   string dev_type = "";
   auto res = message_builder(argv + 1, argv + argc).extract_opts({
     {"width,W",       "set width                       (16000)", width},
     {"height,H",      "set height                      (16000)", height},
     {"iterations,i",  "set iterations                  (  500)", iterations},
-    {"on-cpu,c",      "part calculated on the CPU in % (  100)", on_cpu},
+    {"on-gpu,g",      "part calculated on the GPU in % (    0)", on_gpu},
     {"device-type,d", "set device type (gpu, cpu, accelerator)", dev_type}
   });
   if(! res.error.empty()) {
@@ -225,7 +217,7 @@ int main(int argc, char** argv) {
     return 0;
   }
 
-  distribution = on_cpu;
+  auto on_cpu  = 100 - on_gpu;
   auto min_re  = default_min_real;
   auto max_re  = default_max_real;
   auto min_im  = default_min_imag;
@@ -323,7 +315,7 @@ int main(int argc, char** argv) {
   auto time_total = chrono::duration_cast<chrono::milliseconds>(
     chrono::system_clock::now() - start
   ).count();
-  cout << (100 - on_cpu)
+  cout << on_gpu
        << ", " << time_total
        << ", " << time_cpu
        << ", " << time_gpu
