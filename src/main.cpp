@@ -65,12 +65,12 @@ unsigned long with_opencl = 0;
 
 // global values to track the time
 chrono::system_clock::time_point cpu_start;
-chrono::system_clock::time_point gpu_start;
+chrono::system_clock::time_point opencl_start;
 chrono::system_clock::time_point total_start;
 chrono::system_clock::time_point cpu_end;
-chrono::system_clock::time_point gpu_end;
+chrono::system_clock::time_point opencl_end;
 chrono::system_clock::time_point total_end;
-unsigned long time_gpu = 0;
+unsigned long time_opencl = 0;
 unsigned long time_cpu = 0;
 
 #ifdef PRINT_IMAGE
@@ -144,12 +144,12 @@ void mandel_cl(event_based_actor* self,
     min_imag, max_imag
   };
   spawn_config conf{dim_vec{width, height}};
-  gpu_start = chrono::system_clock::now();
+  opencl_start = chrono::system_clock::now();
   auto clworker = spawn_cl(kernel, "mandelbrot", conf, unbox_args, box_res,
                            in<vector<float_type>>{}, out<vector<int>>{});
   self->sync_send(clworker, move(cljob)).then (
     [=](const vector<int>& result, const chrono::system_clock::time_point& end) {
-      gpu_end = end;
+      opencl_end = end;
       static_cast<void>(result);
       DEBUG("Mandelbrot on GPU calculated");
 #ifdef PRINT_IMAGE
@@ -157,9 +157,6 @@ void mandel_cl(event_based_actor* self,
       calculate_palette(palette, iterations);
       color_and_print(palette, result, width, height, "gpu");
 #endif // PRINT_IMAGE
-      time_gpu = chrono::duration_cast<chrono::milliseconds>(
-        gpu_end - gpu_start
-      ).count();
     }
   );
 }
@@ -309,9 +306,6 @@ int main(int argc, char** argv) {
     await_all_actors_done();
     DEBUG("Mandelbrot on CPU calculated");
     cpu_end = chrono::system_clock::now();
-    time_cpu = chrono::duration_cast<chrono::milliseconds>(
-      cpu_end - cpu_start
-    ).count();
 #ifdef PRINT_IMAGE
     vector<QColor> palette;
     calculate_palette(palette, iterations);
@@ -323,13 +317,19 @@ int main(int argc, char** argv) {
   await_all_actors_done();
   shutdown();
   total_end = chrono::system_clock::now();
+  time_cpu = chrono::duration_cast<chrono::milliseconds>(
+    cpu_end - cpu_start
+  ).count();
+  time_opencl = chrono::duration_cast<chrono::milliseconds>(
+    opencl_end - opencl_start
+  ).count();
   auto time_total = chrono::duration_cast<chrono::milliseconds>(
     total_end - total_start
   ).count();
   cout << with_opencl
        << ", " << time_total
        << ", " << time_cpu
-       << ", " << time_gpu
+       << ", " << time_opencl
        << endl;
   return 0;
 }
