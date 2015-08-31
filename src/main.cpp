@@ -179,26 +179,57 @@ T get_top(T distance, uint32_t percentage) {
   return distance * (100 - percentage) / 100;
 }
 
+program create_program(const string& dev_type, const char* source,
+                       const char* options = nullptr) {
+  device_type t;
+  if (dev_type == "") {
+    return program::create(source, options);
+  } else if (dev_type == "cpu") {
+    t = cpu;
+  } else if (dev_type == "gpu") {
+    t = gpu;
+  } else if (dev_type == "accelerator") {
+    t = accelerator;
+  } else {
+    t = all;
+  }
+  auto dev = metainfo::instance()->get_device_if([t](const device& d) {
+    return d.get_device_type() == t;
+  });
+  if (! dev) {
+    throw std::runtime_error("No device of type " + dev_type + " found");
+  }
+  return program::create(source, options, *dev);
+}
+
 int main(int argc, char** argv) {
+  uint32_t width = default_width;
+  uint32_t height = default_height;
+  uint32_t iterations = default_iterations;
   uint32_t on_cpu = 100;
-  if (argc == 2) {
-    on_cpu = stoul(argv[1]);
-    if (on_cpu > 100) {
-      usage(argv[0]);
-    }
-  } else if (argc != 1) {
-    usage(argv[0]);
+  string dev_type = "";
+  auto res = message_builder(argv + 1, argv + argc).extract_opts({
+    {"width,W",       "set width                       (16000)", width},
+    {"height,H",      "set height                      (16000)", height},
+    {"iterations,i",  "set iterations                  (  500)", iterations},
+    {"on-cpu,c",      "part calculated on the CPU in % (  100)", on_cpu},
+    {"device-type,d", "set device type (gpu, cpu, accelerator)", dev_type}
+  });
+  if(! res.error.empty()) {
+    cerr << res.error << endl;
+    return 1;
+  }
+  if (res.opts.count("help") > 0  || iterations <= 0
+      || width <= 0 || height <= 0) {
+    cout << res.helptext << endl;
+    return 0;
   }
 
   distribution = on_cpu;
-
-  auto iterations = default_iterations;
-  auto width      = default_width;
-  auto height     = default_height;
-  auto min_re     = default_min_real;
-  auto max_re     = default_max_real;
-  auto min_im     = default_min_imag;
-  auto max_im     = default_max_imag;
+  auto min_re  = default_min_real;
+  auto max_re  = default_max_real;
+  auto min_im  = default_min_imag;
+  auto max_im  = default_max_imag;
 
   auto scale = [&](const float_type ratio) {
     float_type abs_re = fabs(max_re + (-1 * min_re)) / 2;
@@ -235,10 +266,9 @@ int main(int argc, char** argv) {
         << "(" << gpu_min_re << " to " << gpu_max_re << ")");
 #endif // ENABLE_GPU
 
-  auto kernel = program::create(kernel_source);
-  auto start = chrono::system_clock::now();
-
 #ifdef ENABLE_GPU
+  auto kernel = create_program(dev_type, kernel_source);
+  auto start  = chrono::system_clock::now();
   if (gpu_width > 0) {
     // trigger calculation on the GPU
     spawn(mandel_cl, kernel, iterations, gpu_width, gpu_height,
