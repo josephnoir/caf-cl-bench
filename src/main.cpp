@@ -60,6 +60,8 @@ constexpr const char* kernel_source = R"__(
 
 } // namespace <anonymous>
 
+using ack_atom = atom_constant<atom("ack")>;
+
 // how much of the problem is offloaded to the OpenCL device
 unsigned long with_opencl = 0;
 
@@ -119,9 +121,33 @@ void color_and_print(const vector<QColor>& palette,
 #endif // PRINT_IMAGE
 
 #ifdef ENABLE_GPU
+// create a program for a specific device type
+program create_program(const string& dev_type, const char* source,
+                       const char* options = nullptr) {
+  device_type t;
+  if (dev_type == "") {
+    return program::create(source, options);
+  } else if (dev_type == "cpu") {
+    t = cpu;
+  } else if (dev_type == "gpu") {
+    t = gpu;
+  } else if (dev_type == "accelerator") {
+    t = accelerator;
+  } else {
+    t = all;
+  }
+  auto dev = metainfo::instance()->get_device_if([t](const device& d) {
+    return d.get_device_type() == t;
+  });
+  if (! dev) {
+    throw std::runtime_error("No device of type " + dev_type + " found");
+  }
+  return program::create(source, options, *dev);
+}
+
 // calculates mandelbrot that contains the iteration count on GPU
 void mandel_cl(event_based_actor* self,
-               program kernel,
+               const string& dev_type,
                uint32_t iterations,
                uint32_t width,
                uint32_t height,
@@ -129,7 +155,7 @@ void mandel_cl(event_based_actor* self,
                float_type max_real,
                float_type min_imag,
                float_type max_imag) {
-  using namespace caf::opencl;
+  auto prog = create_program(dev_type, kernel_source);
   auto unbox_args = [](message& msg) -> optional<message> {
     return msg;
   };
@@ -145,7 +171,7 @@ void mandel_cl(event_based_actor* self,
   };
   spawn_config conf{dim_vec{width, height}};
   opencl_start = chrono::system_clock::now();
-  auto clworker = spawn_cl(kernel, "mandelbrot", conf, unbox_args, box_res,
+  auto clworker = spawn_cl(prog, "mandelbrot", conf, unbox_args, box_res,
                            in<vector<float_type>>{}, out<vector<int>>{});
   self->sync_send(clworker, move(cljob)).then (
     [=](const vector<int>& result, const chrono::system_clock::time_point& end) {
@@ -176,29 +202,6 @@ T get_bottom(T distance, uint32_t percentage) {
 template<typename T>
 T get_top(T distance, uint32_t percentage) {
   return distance * (100 - percentage) / 100;
-}
-
-program create_program(const string& dev_type, const char* source,
-                       const char* options = nullptr) {
-  device_type t;
-  if (dev_type == "") {
-    return program::create(source, options);
-  } else if (dev_type == "cpu") {
-    t = cpu;
-  } else if (dev_type == "gpu") {
-    t = gpu;
-  } else if (dev_type == "accelerator") {
-    t = accelerator;
-  } else {
-    t = all;
-  }
-  auto dev = metainfo::instance()->get_device_if([t](const device& d) {
-    return d.get_device_type() == t;
-  });
-  if (! dev) {
-    throw std::runtime_error("No device of type " + dev_type + " found");
-  }
-  return program::create(source, options, *dev);
 }
 
 int main(int argc, char** argv) {
@@ -266,10 +269,9 @@ int main(int argc, char** argv) {
 #endif // ENABLE_GPU
 
 #ifdef ENABLE_GPU
-  auto kernel = create_program(dev_type, kernel_source);
   if (gpu_width > 0) {
     // trigger calculation on the GPU
-    spawn(mandel_cl, kernel, iterations, gpu_width, gpu_height,
+    spawn(mandel_cl, dev_type, iterations, gpu_width, gpu_height,
           gpu_min_re, gpu_max_re, gpu_min_im, gpu_max_im);
   }
 #endif // ENABLE_GPU
@@ -277,13 +279,14 @@ int main(int argc, char** argv) {
 #ifdef ENABLE_CPU
   cpu_start = chrono::system_clock::now();
   if (cpu_width > 0) {
+    scoped_actor cnt;
     // trigger calculation on the CPU
     vector<int> image(cpu_width * cpu_height);
     auto re_factor = (cpu_max_re - cpu_min_re) / (cpu_width - 1);
     auto im_factor = (cpu_max_im - cpu_min_im) / (cpu_height - 1);
     int* indirection = image.data();
     for (uint32_t im = 0; im < cpu_height; ++im) {
-      spawn([=] {
+      spawn([&cnt, indirection, cpu_width, cpu_min_re, cpu_max_re, cpu_min_im, cpu_max_im, re_factor, im_factor, im, iterations] (event_based_actor* self){
         for (uint32_t re = 0; re < cpu_width; ++re) {
           auto z_re = cpu_min_re + re * re_factor;
           auto z_im = cpu_max_im - im * im_factor;
@@ -301,11 +304,14 @@ int main(int argc, char** argv) {
           } while (cnt < iterations && cond <= 4.0f);
           indirection[re + im * cpu_width] = cnt;
         }
+        self->send(cnt, ack_atom::value);
       });
     }
-    await_all_actors_done();
-    DEBUG("Mandelbrot on CPU calculated");
+    unsigned i = 0;
+    cnt->receive_for(i, cpu_height)( [](ack_atom) { /* nop */ } );
+    // await_all_actors_done();
     cpu_end = chrono::system_clock::now();
+    DEBUG("Mandelbrot on CPU calculated");
 #ifdef PRINT_IMAGE
     vector<QColor> palette;
     calculate_palette(palette, iterations);
