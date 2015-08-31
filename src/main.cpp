@@ -145,7 +145,7 @@ program create_program(const string& dev_type, const char* source,
   return program::create(source, options, *dev);
 }
 
-// calculates mandelbrot that contains the iteration count on GPU
+// calculates mandelbrot with OpenCL
 void mandel_cl(event_based_actor* self,
                const string& dev_type,
                uint32_t iterations,
@@ -177,7 +177,7 @@ void mandel_cl(event_based_actor* self,
     [=](const vector<int>& result, const chrono::system_clock::time_point& end) {
       opencl_end = end;
       static_cast<void>(result);
-      DEBUG("Mandelbrot on GPU calculated");
+      DEBUG("Mandelbrot with OpenCL calculated");
 #ifdef PRINT_IMAGE
       vector<QColor> palette;
       calculate_palette(palette, iterations);
@@ -258,21 +258,21 @@ int main(int argc, char** argv) {
 #endif // ENABLE_CPU
 
 #ifdef ENABLE_OPENCL
-  auto gpu_width  = get_top(width, on_cpu);
-  auto gpu_height = height;
-  auto gpu_min_re = get_cut(min_re, max_re, on_cpu);
-  auto gpu_max_re = max_re;
-  auto gpu_min_im = min_im;
-  auto gpu_max_im = max_im;
-  DEBUG("[GPU] width: " << gpu_width
-        << "(" << gpu_min_re << " to " << gpu_max_re << ")");
+  auto opencl_width  = get_top(width, on_cpu);
+  auto opencl_height = height;
+  auto opencl_min_re = get_cut(min_re, max_re, on_cpu);
+  auto opencl_max_re = max_re;
+  auto opencl_min_im = min_im;
+  auto opencl_max_im = max_im;
+  DEBUG("[OpenCL] width: " << opencl_width
+        << "(" << opencl_min_re << " to " << opencl_max_re << ")");
 #endif // ENABLE_OPENCL
 
 #ifdef ENABLE_OPENCL
-  if (gpu_width > 0) {
-    // trigger calculation on the GPU
-    spawn(mandel_cl, dev_type, iterations, gpu_width, gpu_height,
-          gpu_min_re, gpu_max_re, gpu_min_im, gpu_max_im);
+  if (opencl_width > 0) {
+    // trigger calculation with OpenCL
+    spawn(mandel_cl, dev_type, iterations, opencl_width, opencl_height,
+          opencl_min_re, opencl_max_re, opencl_min_im, opencl_max_im);
   }
 #endif // ENABLE_OPENCL
 
@@ -324,14 +324,18 @@ int main(int argc, char** argv) {
   shutdown();
   total_end = chrono::system_clock::now();
 #ifdef ENABLE_CPU
-  time_cpu = chrono::duration_cast<chrono::milliseconds>(
-    cpu_end - cpu_start
-  ).count();
+  if (cpu_width > 0) {
+    time_cpu = chrono::duration_cast<chrono::milliseconds>(
+      cpu_end - cpu_start
+    ).count();
+  }
 #endif // ENABLE_CPU
 #ifdef ENABLE_OPENCL
-  time_opencl = chrono::duration_cast<chrono::milliseconds>(
-    opencl_end - opencl_start
-  ).count();
+  if (opencl_width > 0) {
+    time_opencl = chrono::duration_cast<chrono::milliseconds>(
+      opencl_end - opencl_start
+    ).count();
+  }
 #endif // ENABLE_OPENCL
   auto time_total = chrono::duration_cast<chrono::milliseconds>(
     total_end - total_start
