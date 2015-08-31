@@ -85,11 +85,11 @@ else ()
   set(CPU_MEASUREMENTS "No")
 endif ()
 
-if (NOT NO_GPU)
-  set(GPU_MEASUREMENTS "Yes")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_GPU")
+if (NOT NO_OPENCL)
+  set(OPENCL_MEASUREMENTS "Yes")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_OPENCL")
 else ()
-  set(GPU_MEASUREMENTS "No")
+  set(OPENCL_MEASUREMENTS "No")
 endif ()
 
 find_package(OPENCL REQUIRED)
@@ -120,10 +120,10 @@ set(ALL_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE}}")
 message(STATUS
         "\n====================|  Build Summary  |===================="
         "\nBuild type:        ${CMAKE_BUILD_TYPE}"
-        "\nCXX:             ${CMAKE_CXX_COMPILER}"
+        "\nCXX:               ${CMAKE_CXX_COMPILER}"
         "\nCXXFLAGS:          ${ALL_CXX_FLAGS}"
         "\nLIBRARIES:         ${LD_FLAGS}"
         "\nPRINT_IMAGE:       ${WITH_IMAGE}"
-        "\nCPU_MEASUREMENTS:  ${CPU_MEASUREMENTS}"
-        "\nGPU_MEASUREMENTS:  ${GPU_MEASUREMENTS}"
+        "\nCPU:               ${CPU_MEASUREMENTS}"
+        "\nOPENCL:            ${OPENCL_MEASUREMENTS}"
         "\n===========================================================\n")

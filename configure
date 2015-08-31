@@ -29,8 +29,8 @@ Usage: $0 [OPTION]... [VAR=VALUE]...
     --with-gcc=FILE             path to g++ executable
     --dual-build                build both with gcc and clang
     --print-image               print mandelbrot images
-    --no-cpu                    don't run the CPU measurements
-    --no-gpu                    don't run the GPU measurements
+    --no-cpu                    don't use the CPU measurements
+    --no-opencl                 don't use the OpenCL measurements
 
   Required Packages in Non-Standard Locations:
     --with-libcaf=PATH         path to libcaf install root
@@ -179,8 +179,8 @@ while [ $# -ne 0 ]; do
         --no-cpu)
             append_cache_entry NO_CPU BOOL true
             ;;
-        --no-gpu)
-            append_cache_entry NO_GPU BOOL true
+        --no-opencl)
+            append_cache_entry NO_OPENCL BOOL true
             ;;
         *)
             echo "Invalid option '$1'.  Try $0 --help to see available options."

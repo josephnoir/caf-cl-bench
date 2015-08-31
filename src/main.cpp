@@ -120,7 +120,7 @@ void color_and_print(const vector<QColor>& palette,
 }
 #endif // PRINT_IMAGE
 
-#ifdef ENABLE_GPU
+#ifdef ENABLE_OPENCL
 // create a program for a specific device type
 program create_program(const string& dev_type, const char* source,
                        const char* options = nullptr) {
@@ -186,7 +186,7 @@ void mandel_cl(event_based_actor* self,
     }
   );
 }
-#endif // ENABLE_GPU
+#endif // ENABLE_OPENCL
 
 template<typename T>
 T get_cut(T start, T end, uint32_t percentage) {
@@ -257,7 +257,7 @@ int main(int argc, char** argv) {
         << "(" << cpu_min_re << " to " << cpu_max_re << ")");
 #endif // ENABLE_CPU
 
-#ifdef ENABLE_GPU
+#ifdef ENABLE_OPENCL
   auto gpu_width  = get_top(width, on_cpu);
   auto gpu_height = height;
   auto gpu_min_re = get_cut(min_re, max_re, on_cpu);
@@ -266,15 +266,15 @@ int main(int argc, char** argv) {
   auto gpu_max_im = max_im;
   DEBUG("[GPU] width: " << gpu_width
         << "(" << gpu_min_re << " to " << gpu_max_re << ")");
-#endif // ENABLE_GPU
+#endif // ENABLE_OPENCL
 
-#ifdef ENABLE_GPU
+#ifdef ENABLE_OPENCL
   if (gpu_width > 0) {
     // trigger calculation on the GPU
     spawn(mandel_cl, dev_type, iterations, gpu_width, gpu_height,
           gpu_min_re, gpu_max_re, gpu_min_im, gpu_max_im);
   }
-#endif // ENABLE_GPU
+#endif // ENABLE_OPENCL
 
 #ifdef ENABLE_CPU
   cpu_start = chrono::system_clock::now();
@@ -323,12 +323,16 @@ int main(int argc, char** argv) {
   await_all_actors_done();
   shutdown();
   total_end = chrono::system_clock::now();
+#ifdef ENABLE_CPU
   time_cpu = chrono::duration_cast<chrono::milliseconds>(
     cpu_end - cpu_start
   ).count();
+#endif // ENABLE_CPU
+#ifdef ENABLE_OPENCL
   time_opencl = chrono::duration_cast<chrono::milliseconds>(
     opencl_end - opencl_start
   ).count();
+#endif // ENABLE_OPENCL
   auto time_total = chrono::duration_cast<chrono::milliseconds>(
     total_end - total_start
   ).count();
