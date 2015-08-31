@@ -1,11 +1,13 @@
 
 #include <chrono>
 
+#ifdef PRINT_IMAGE
 #include <QFile>
 #include <QColor>
 #include <QImage>
 #include <QBuffer>
 #include <QByteArray>
+#endif
 
 #include "config.hpp"
 
@@ -14,6 +16,7 @@
 
 using namespace std;
 using namespace caf;
+using namespace caf::opencl;
 
 namespace {
 
@@ -49,13 +52,7 @@ constexpr const char* kernel_source = R"__(
   }
 )__";
 
-// Some config stuff
-//#define PRINT_IMAGE
-//#define ENABLE_DEBUG
-#define ENABLE_CPU
-#define ENABLE_GPU
-
-#ifdef ENABLE_DEBUG
+#ifdef CAF_DEBUG
 #define DEBUG(x) cerr << x << endl;
 #else
 #define DEBUG(x)
@@ -63,13 +60,13 @@ constexpr const char* kernel_source = R"__(
 
 } // namespace <anonymous>
 
-// !!!! ugly global values for time !!!!
+// global values to track the time
 unsigned long time_gpu = 0;
 unsigned long time_cpu = 0;
 unsigned long distribution = 100;
 
 #ifdef PRINT_IMAGE
-inline void calculate_palette(std::vector<QColor>& storage, uint32_t iterations) {
+inline void calculate_palette(vector<QColor>& storage, uint32_t iterations) {
   // generating new colors
   storage.clear();
   storage.reserve(iterations + 1);
@@ -81,8 +78,8 @@ inline void calculate_palette(std::vector<QColor>& storage, uint32_t iterations)
   storage.push_back(QColor(qRgb(0,0,0)));
 }
 
-void color_and_print(const std::vector<QColor>& palette,
-                     const std::vector<int>& counts,
+void color_and_print(const vector<QColor>& palette,
+                     const vector<int>& counts,
                      uint32_t width, uint32_t height,
                      const char* identifier) {
   QImage image{static_cast<int>(width),
@@ -100,7 +97,7 @@ void color_and_print(const std::vector<QColor>& palette,
   image.save(&buf, image_format);
   buf.close();
   auto img = QImage::fromData(ba, image_format);
-  std::ostringstream fname;
+  ostringstream fname;
   fname << "mandelbrot_" << distribution << "_" << identifier;
   fname << image_file_ending;
   QFile f{fname.str().c_str()};
@@ -116,18 +113,19 @@ void color_and_print(const std::vector<QColor>& palette,
 #ifdef ENABLE_GPU
 // calculates mandelbrot that contains the iteration count on GPU
 void mandel_cl(event_based_actor* self,
-               caf::opencl::program kernel,
-               std::uint32_t iterations,
-               std::uint32_t width,
-               std::uint32_t height,
+               program kernel,
+               uint32_t iterations,
+               uint32_t width,
+               uint32_t height,
                float_type min_real,
                float_type max_real,
                float_type min_imag,
                float_type max_imag) {
+  using namespace caf::opencl;
   auto unbox_args = [](message& msg) -> optional<message> {
     return msg;
   };
-  auto box_res = [] (vector<int>& result) -> message {
+  auto box_res = [] (vector<int> result) -> message {
     return make_message(move(result), chrono::system_clock::now());
   };
   vector<float_type> cljob {
@@ -137,25 +135,22 @@ void mandel_cl(event_based_actor* self,
     min_real, max_real,
     min_imag, max_imag
   };
-  auto start_gpu = std::chrono::system_clock::now();
-  auto clworker = spawn_cl<int*(float_type*)>(kernel, "mandelbrot",
-                                         unbox_args, box_res,
-                                         {width, height});
-  self->sync_send(clworker, std::move(cljob)).then (
+  spawn_config conf{dim_vec{width, height}};
+  auto start_gpu = chrono::system_clock::now();
+  auto clworker = spawn_cl(kernel, "mandelbrot", conf, unbox_args, box_res,
+                           in<vector<float_type>>{}, out<vector<int>>{});
+  self->sync_send(clworker, move(cljob)).then (
     [=](const vector<int>& result, const chrono::system_clock::time_point& end_gpu) {
       static_cast<void>(result);
       DEBUG("Mandelbrot on GPU calculated");
 #ifdef PRINT_IMAGE
-      std::vector<QColor> palette;
+      vector<QColor> palette;
       calculate_palette(palette, iterations);
       color_and_print(palette, result, width, height, "gpu");
 #endif // PRINT_IMAGE
       time_gpu = chrono::duration_cast<chrono::milliseconds>(
         end_gpu - start_gpu
       ).count();
-    },
-    others() >> [] {
-      DEBUG("Unhandled message in mandel_cl");
     }
   );
 }
@@ -216,7 +211,7 @@ int main(int argc, char** argv) {
     min_im = mid_im - dist;
     max_im = mid_im + dist;
   };
-//  scale(default_scaling);
+  scale(default_scaling);
 
 #ifdef ENABLE_CPU
   auto cpu_width  = get_bottom(width, on_cpu);
@@ -240,8 +235,8 @@ int main(int argc, char** argv) {
         << "(" << gpu_min_re << " to " << gpu_max_re << ")");
 #endif // ENABLE_GPU
 
-  auto kernel = caf::opencl::program::create(kernel_source);
-  auto start = std::chrono::system_clock::now();
+  auto kernel = program::create(kernel_source);
+  auto start = chrono::system_clock::now();
 
 #ifdef ENABLE_GPU
   if (gpu_width > 0) {
@@ -252,10 +247,10 @@ int main(int argc, char** argv) {
 #endif // ENABLE_GPU
 
 #ifdef ENABLE_CPU
-  auto start_cpu = std::chrono::system_clock::now();
+  auto start_cpu = chrono::system_clock::now();
   if (cpu_width > 0) {
     // trigger calculation on the CPU
-    std::vector<int> image(cpu_width * cpu_height);
+    vector<int> image(cpu_width * cpu_height);
     auto re_factor = (cpu_max_re - cpu_min_re) / (cpu_width - 1);
     auto im_factor = (cpu_max_im - cpu_min_im) / (cpu_height - 1);
     int* indirection = image.data();
@@ -282,7 +277,7 @@ int main(int argc, char** argv) {
     }
     await_all_actors_done();
 #ifdef PRINT_IMAGE
-    std::vector<QColor> palette;
+    vector<QColor> palette;
     calculate_palette(palette, iterations);
     color_and_print(palette, image, cpu_width, cpu_height, "cpu");
 #endif // PRINT_IMAGE
@@ -298,9 +293,10 @@ int main(int argc, char** argv) {
   auto time_total = chrono::duration_cast<chrono::milliseconds>(
     chrono::system_clock::now() - start
   ).count();
-  cout << on_cpu << ", " << time_total
-                 << ", " << time_cpu
-                 << ", " << time_gpu
-                 << endl;
+  cout << (100 - on_cpu)
+       << ", " << time_total
+       << ", " << time_cpu
+       << ", " << time_gpu
+       << endl;
   return 0;
 }

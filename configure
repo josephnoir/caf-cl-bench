@@ -28,6 +28,9 @@ Usage: $0 [OPTION]... [VAR=VALUE]...
     --with-clang=FILE           path to clang++ executable
     --with-gcc=FILE             path to g++ executable
     --dual-build                build both with gcc and clang
+    --print-image               print mandelbrot images
+    --no-cpu                    don't run the CPU measurements
+    --no-gpu                    don't run the GPU measurements
 
   Required Packages in Non-Standard Locations:
     --with-libcaf=PATH         path to libcaf install root
@@ -75,12 +78,6 @@ configure ()
         append_cache_entry EXECUTABLE_OUTPUT_PATH PATH "$workdir/bin"
     fi
 
-    if [ -n "$4" ]; then
-        append_cache_entry LIBRARY_OUTPUT_PATH PATH $4
-    else
-        append_cache_entry LIBRARY_OUTPUT_PATH PATH "$workdir/lib"
-    fi
-
     if [ -d $workdir ]; then
         # If a build directory exists, check if it has a CMake cache.
         if [ -f $workdir/CMakeCache.txt ]; then
@@ -109,8 +106,6 @@ configure ()
 builddir="$sourcedir/build"
 CMakeCacheEntries=""
 append_cache_entry CMAKE_INSTALL_PREFIX        PATH   /usr/local
-append_cache_entry ENABLE_DEBUG                BOOL   false
-append_cache_entry ENABLE_OPENCL               BOOL   true
 
 # Parse arguments.
 while [ $# -ne 0 ]; do
@@ -129,23 +124,23 @@ while [ $# -ne 0 ]; do
             case $level in
                 ERROR)
                     append_cache_entry CAF_LOG_LEVEL STRING 0
-                    ;;  
+                    ;;
                 WARNING)
                     append_cache_entry CAF_LOG_LEVEL STRING 1
-                    ;;  
+                    ;;
                 INFO)
                     append_cache_entry CAF_LOG_LEVEL STRING 2
-                    ;;  
+                    ;;
                 DEBUG)
                     append_cache_entry CAF_LOG_LEVEL STRING 3
-                    ;;  
+                    ;;
                 TRACE)
                     append_cache_entry CAF_LOG_LEVEL STRING 4
-                    ;;  
-                *)  
+                    ;;
+                *)
                     echo "Invalid log level '$level'. Try '$0 --help' to see valid values."
                     exit 1
-                    ;;  
+                    ;;
             esac
             ;;
         --generator=*)
@@ -158,7 +153,7 @@ while [ $# -ne 0 ]; do
             append_cache_entry ENABLE_DEBUG BOOL true
             ;;
         --with-libcaf=*)
-            append_cache_entry LIBCAF_ROOT_DIR PATH $optarg
+            append_cache_entry CAF_ROOT_DIR PATH $optarg
             ;;
         --with-clang=*)
             clang=$optarg
@@ -177,6 +172,15 @@ while [ $# -ne 0 ]; do
             ;;
         --dual-build)
             dualbuild=1
+            ;;
+        --print-image)
+            append_cache_entry PRINT_IMAGE BOOL true
+            ;;
+        --no-cpu)
+            append_cache_entry NO_CPU BOOL true
+            ;;
+        --no-gpu)
+            append_cache_entry NO_GPU BOOL true
             ;;
         *)
             echo "Invalid option '$1'.  Try $0 --help to see available options."
@@ -215,7 +219,7 @@ else
 fi
 
 printf "DIRS := %s\n\n" "$workdirs" > $sourcedir/Makefile
-makefile=$(cat <<'EOT'
+makefile=`cat <<'EOT'
 all:
 	@for i in $(DIRS); do $(MAKE) -C $$i $@ || exit; done
 
@@ -239,6 +243,6 @@ doc:
 
 .PHONY: all test install uninstall clean distclean
 EOT
-)
+`
 
 echo "$makefile" >> $sourcedir/Makefile

@@ -14,8 +14,6 @@ endif ()
 
 set (CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR})
 
-message("CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
-
 if(CMAKE_CXX_FLAGS)
   set(CMAKE_CXX_FLAGS_DEBUG          "")
   set(CMAKE_CXX_FLAGS_MINSIZEREL     "")
@@ -67,36 +65,65 @@ endif(CAF_LOG_LEVEL)
 if (ENABLE_DEBUG)
   set(CMAKE_BUILD_TYPE Debug)
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCAF_DEBUG")
+elseif (NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE RelWithDebInfo)
 endif()
 
-find_package(Libcaf COMPONENTS core io opencl REQUIRED)
+if (PRINT_IMAGE)
+  FIND_PACKAGE(Qt4 REQUIRED)
+  INCLUDE(${QT_USE_FILE})
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DPRINT_IMAGE")
+  set(WITH_IMAGE "Yes")
+else ()
+  set(WITH_IMAGE "No")
+endif ()
+
+if (NOT NO_CPU)
+  set(CPU_MEASUREMENTS "Yes")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_CPU")
+else ()
+  set(CPU_MEASUREMENTS "No")
+endif ()
+
+if (NOT NO_GPU)
+  set(GPU_MEASUREMENTS "Yes")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DENABLE_GPU")
+else ()
+  set(GPU_MEASUREMENTS "No")
+endif ()
+
 find_package(OPENCL REQUIRED)
-add_definitions("-DENABLE_OPENCL")
+find_package(CAF COMPONENTS core opencl REQUIRED)
 
-FIND_PACKAGE(Qt4 REQUIRED)
-INCLUDE(${QT_USE_FILE})
-
-INCLUDE_DIRECTORIES(. include ${CMAKE_BINARY_DIR} ${LIBCAF_INCLUDE_DIRS} ${OpenCL_INCLUDE_DIRS})
+INCLUDE_DIRECTORIES(
+  .
+  include
+  ${CMAKE_BINARY_DIR}
+  ${CAF_INCLUDE_DIRS}
+  ${OpenCL_INCLUDE_DIRS}
+)
 
 set(SOURCES
-    src/main.cpp
-#    src/client.cpp
-    src/config.cpp
-    src/q_byte_array_info.cpp)
+  src/main.cpp
+  src/config.cpp
+)
 
 file(GLOB HEADERS "include/*.hpp")
 
 add_executable(cl-bench ${SOURCES} ${HEADERS})
-target_link_libraries(cl-bench ${CMAKE_DL_LIBS} ${LIBCAF_LIBRARIES} ${QT_LIBRARIES} ${OpenCL_LIBRARIES})
+target_link_libraries(cl-bench ${CMAKE_LD_LIBS} ${CAF_LIBRARIES} ${QT_LIBRARIES} ${OpenCL_LIBRARIES})
 
-set(LD_FLAGS ${LD_FLAGS} ${CMAKE_LD_LIBS})
+set(LD_FLAGS ${LD_FLAGS} ${CMAKE_LD_LIBS} ${CAF_LIBRARIES} ${QT_LIBRARIES} ${OpenCL_LIBRARIES})
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" UPPER_BUILD_TYPE)
 set(ALL_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${CMAKE_CXX_FLAGS_${UPPER_BUILD_TYPE}}")
 message(STATUS
         "\n====================|  Build Summary  |===================="
         "\nBuild type:        ${CMAKE_BUILD_TYPE}"
+        "\nCXX:             ${CMAKE_CXX_COMPILER}"
         "\nCXXFLAGS:          ${ALL_CXX_FLAGS}"
         "\nLIBRARIES:         ${LD_FLAGS}"
+        "\nPRINT_IMAGE:       ${WITH_IMAGE}"
+        "\nCPU_MEASUREMENTS:  ${CPU_MEASUREMENTS}"
+        "\nGPU_MEASUREMENTS:  ${GPU_MEASUREMENTS}"
         "\n===========================================================\n")
-
